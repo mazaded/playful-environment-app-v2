@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function PlayfulEnvironmentApp() {
   const canvasRef = useRef(null);
@@ -38,7 +39,7 @@ export default function PlayfulEnvironmentApp() {
     const res = await fetch("/api/generate-play-prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt })
+      body: JSON.stringify({ prompt }),
     });
     const data = await res.json();
     setResponse(data.output);
@@ -65,12 +66,7 @@ export default function PlayfulEnvironmentApp() {
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
       />
-      <button
-        onClick={handlePromptSubmit}
-        className="px-4 py-2 bg-blue-500 text-white rounded"
-      >
-        Generate Design Prompt
-      </button>
+      <Button onClick={handlePromptSubmit}>Generate Design Prompt</Button>
 
       {response && (
         <div className="bg-gray-100 p-4 rounded-md">
