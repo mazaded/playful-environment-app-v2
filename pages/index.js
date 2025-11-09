@@ -522,7 +522,7 @@ export default function PlayfulEnvironmentDesigner() {
                 : "Describe space or place in image. What is it? What is in it?"}
             </label>
             {AUTO_DESCRIPTION_ENABLED && (
-              <div className="mb-2 rounded border border-gray-200 bg-gray-50 p-3 text-sm">
+              <div className="mb-2 rounded border border-gray-200 bg-gray-50 p-3 text-sm text-black">
                 {autoDescriptionStatus}
                 {autoDescription && (
                   <div className="mt-2">
