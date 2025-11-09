@@ -86,7 +86,7 @@ export default function PlayfulEnvironmentDesigner() {
   const imageRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const [imageSrc, setImageSrc] = useState(" ");
+  const [imageSrc, setImageSrc] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [transformation, setTransformation] = useState("");
   const [scenarioType, setScenarioType] = useState("adaptation");
@@ -463,7 +463,16 @@ export default function PlayfulEnvironmentDesigner() {
           accept="image/*"
           ref={fileInputRef}
           onChange={handleImageUpload}
+          className="hidden"
         />
+        <button
+          type="button"
+          className="rounded px-4 py-2 text-white"
+          style={{ backgroundColor: "#8d4ec4" }}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Choose a photo
+        </button>
       </div>
 
       {imageSrc && (
