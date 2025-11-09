@@ -12,6 +12,46 @@ console.log("GEMINI flag", process.env.NEXT_PUBLIC_ENABLE_GEMINI_IMAGE);
 
 const MAX_PREVIEW_DIMENSION = 1024;
 const PREVIEW_QUALITY = 0.7;
+const DEFAULT_BRUSH_COLOR = "#00c8ff";
+const MAX_UNDO_STATES = 15;
+const TOOL_OPTIONS = [
+  { id: "brush", label: "Brush", icon: "🖌️" },
+  { id: "eraser", label: "Eraser", icon: "🧽" },
+  { id: "eyedropper", label: "Eyedropper", icon: "🎯" },
+];
+
+const hexToRgb = (hex = "") => {
+  const sanitized = hex.replace("#", "");
+  if (![3, 6].includes(sanitized.length)) {
+    return { r: 0, g: 200, b: 255 };
+  }
+  const expanded =
+    sanitized.length === 3
+      ? sanitized
+          .split("")
+          .map((ch) => ch + ch)
+          .join("")
+      : sanitized;
+  const intVal = parseInt(expanded, 16);
+  return {
+    r: (intVal >> 16) & 255,
+    g: (intVal >> 8) & 255,
+    b: intVal & 255,
+  };
+};
+
+const rgbToHex = (r = 0, g = 0, b = 0) => {
+  const toHex = (value) =>
+    Math.max(0, Math.min(255, Math.round(value || 0)))
+      .toString(16)
+      .padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+};
+
+const rgbaFromHex = (hex, alpha = 1) => {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
 
 const LANGUAGE_RULES = [
   {
@@ -87,6 +127,8 @@ export default function PlayfulEnvironmentDesigner() {
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const fileInputRef = useRef(null);
+  const drawingState = useRef({ active: false, lastX: 0, lastY: 0 });
+  const undoStackRef = useRef([]);
 
   const [imageSrc, setImageSrc] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
@@ -108,12 +150,174 @@ export default function PlayfulEnvironmentDesigner() {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [conceptSourceImage, setConceptSourceImage] = useState(null);
   const [refinePrompt, setRefinePrompt] = useState("");
+  const [tool, setTool] = useState("brush");
+  const [brushColor, setBrushColor] = useState(DEFAULT_BRUSH_COLOR);
+  const [brushOpacity, setBrushOpacity] = useState(0.6);
+  const [brushSize, setBrushSize] = useState(18);
+  const [hasSketch, setHasSketch] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
 
   const condenseText = (text = "", wordLimit = 80) => {
     const words = text.trim().split(/\s+/);
     if (!text.trim() || words.length <= wordLimit) return text.trim();
     return words.slice(0, wordLimit).join(" ");
   };
+
+  const getCanvasContext = () => {
+    if (!canvasRef.current) return null;
+    return canvasRef.current.getContext("2d");
+  };
+
+  const getCanvasCoords = (event) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+      x: (event.clientX - rect.left) * scaleX,
+      y: (event.clientY - rect.top) * scaleY,
+    };
+  };
+
+  const canvasHasInk = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return false;
+    const ctx = getCanvasContext();
+    if (!ctx) return false;
+    const { width, height } = canvas;
+    if (!width || !height) return false;
+    try {
+      const { data } = ctx.getImageData(0, 0, width, height);
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] > 0) return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Canvas read failed:", error);
+      return false;
+    }
+  };
+
+  const clearCanvasLayer = () => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = getCanvasContext();
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    undoStackRef.current = [];
+    setCanUndo(false);
+    setHasSketch(false);
+  };
+
+  const saveCanvasState = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const snapshot = canvas.toDataURL("image/png");
+    undoStackRef.current.push(snapshot);
+    if (undoStackRef.current.length > MAX_UNDO_STATES) {
+      undoStackRef.current.shift();
+    }
+    setCanUndo(undoStackRef.current.length > 0);
+  };
+
+  const restoreCanvasState = (snapshot) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = getCanvasContext();
+    if (!ctx) return;
+    if (!snapshot) {
+      clearCanvasLayer();
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      setHasSketch(canvasHasInk());
+    };
+    img.src = snapshot;
+  };
+
+  const handleUndoSketch = () => {
+    if (!canvasRef.current) return;
+    if (undoStackRef.current.length === 0) {
+      clearCanvasLayer();
+      return;
+    }
+    const snapshot = undoStackRef.current.pop();
+    restoreCanvasState(snapshot);
+    setCanUndo(undoStackRef.current.length > 0);
+  };
+
+  const handleClearSketch = () => {
+    clearCanvasLayer();
+  };
+
+  const handlePointerDown = (event) => {
+    if (!imageSrc || !canvasRef.current) return;
+    event.preventDefault();
+    const coords = getCanvasCoords(event);
+    if (!coords) return;
+    const ctx = getCanvasContext();
+    if (!ctx) return;
+
+    if (tool === "eyedropper") {
+      const pixel = ctx
+        .getImageData(Math.floor(coords.x), Math.floor(coords.y), 1, 1)
+        .data;
+      if (pixel[3] > 0) {
+        setBrushColor(rgbToHex(pixel[0], pixel[1], pixel[2]));
+        const sampledOpacity = Number((pixel[3] / 255).toFixed(2));
+        setBrushOpacity(sampledOpacity > 0 ? sampledOpacity : brushOpacity);
+        setTool("brush");
+      }
+      return;
+    }
+
+    saveCanvasState();
+    drawingState.current = { active: true, lastX: coords.x, lastY: coords.y };
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = brushSize;
+    ctx.strokeStyle = rgbaFromHex(brushColor, brushOpacity);
+    ctx.globalCompositeOperation =
+      tool === "eraser" ? "destination-out" : "source-over";
+    ctx.beginPath();
+    ctx.moveTo(coords.x, coords.y);
+    ctx.lineTo(coords.x, coords.y);
+    ctx.stroke();
+  };
+
+  const handlePointerMove = (event) => {
+    if (!drawingState.current.active) return;
+    event.preventDefault();
+    const coords = getCanvasCoords(event);
+    if (!coords) return;
+    const ctx = getCanvasContext();
+    if (!ctx) return;
+    ctx.lineTo(coords.x, coords.y);
+    ctx.stroke();
+    drawingState.current.lastX = coords.x;
+    drawingState.current.lastY = coords.y;
+  };
+
+  const endStroke = () => {
+    if (!drawingState.current.active) return;
+    drawingState.current.active = false;
+    const ctx = getCanvasContext();
+    if (ctx) {
+      ctx.closePath();
+      ctx.globalCompositeOperation = "source-over";
+    }
+    setHasSketch(canvasHasInk());
+  };
+
+  const handlePointerUp = () => endStroke();
+  const handlePointerLeave = () => endStroke();
+  const handlePointerCancel = () => endStroke();
 
   const buildGeminiPrompt = () => {
     const baseTag = scenarioType === "adaptation"
@@ -231,6 +435,9 @@ export default function PlayfulEnvironmentDesigner() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    clearCanvasLayer();
+    setGeneratedImage(null);
+    setConceptSourceImage(null);
     setImageSrc("");
     setLocationStatus("Reading image...");
     setLocation("");
@@ -298,21 +505,6 @@ export default function PlayfulEnvironmentDesigner() {
       console.error("Auto description failed:", error);
       setAutoDescriptionStatus("We couldn't auto-describe this image.");
     }
-  };
-
-  const handleDraw = (event) => {
-    if (!imageSrc) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (event.clientX - rect.left) * scaleX;
-    const y = (event.clientY - rect.top) * scaleY;
-    ctx.fillStyle = "rgba(0, 200, 255, 0.4)";
-    ctx.beginPath();
-    ctx.arc(x, y, 12, 0, 2 * Math.PI);
-    ctx.fill();
   };
 
   const handlePromptSubmit = async () => {
@@ -392,8 +584,19 @@ export default function PlayfulEnvironmentDesigner() {
     }
   };
 
-  const requestConceptImage = async ({ promptText, compositeDataUrl, baseDataUrl, maskData, useInpainting }) => {
-    setImageGenerationStatus("Generating AI concept image...");
+  const requestConceptImage = async ({
+    promptText,
+    compositeDataUrl,
+    baseDataUrl,
+    maskData,
+    useInpainting,
+    sketchProvided = true,
+  }) => {
+    setImageGenerationStatus(
+      sketchProvided
+        ? "Generating AI concept image..."
+        : "Generating AI concept image (no sketch guidance)..."
+    );
     setGeneratedImage(null);
 
     try {
@@ -439,7 +642,7 @@ export default function PlayfulEnvironmentDesigner() {
   const handleGenerateImage = async () => {
     if (!GEMINI_IMAGE_ENABLED) return;
     if (!canvasRef.current || !imageRef.current || !imagePrompt.trim()) {
-      setImageGenerationStatus("Please upload an image, draw, and edit the prompt first.");
+      setImageGenerationStatus("Please upload an image and generate the prompt first.");
       return;
     }
 
@@ -450,7 +653,8 @@ export default function PlayfulEnvironmentDesigner() {
     }
 
     try {
-      if (GEMINI_INPAINTING_ENABLED) {
+      const canUseInpainting = GEMINI_INPAINTING_ENABLED && hasSketch;
+      if (canUseInpainting) {
         const baseCanvas = document.createElement("canvas");
         const baseImage = imageRef.current;
         baseCanvas.width = baseImage.naturalWidth || baseImage.width;
@@ -490,6 +694,7 @@ export default function PlayfulEnvironmentDesigner() {
           baseDataUrl: baseData,
           maskData,
           useInpainting: true,
+          sketchProvided: true,
         });
       } else {
         const compositeCanvas = document.createElement("canvas");
@@ -506,6 +711,7 @@ export default function PlayfulEnvironmentDesigner() {
           promptText: geminiPrompt,
           compositeDataUrl: compositeData,
           useInpainting: false,
+          sketchProvided: hasSketch,
         });
       }
     } catch (error) {
@@ -520,9 +726,21 @@ export default function PlayfulEnvironmentDesigner() {
       promptText: refinePrompt.trim(),
       compositeDataUrl: conceptSourceImage,
       useInpainting: false,
+      sketchProvided: true,
     });
     setRefinePrompt("");
   };
+
+  const sketchLegend = drawingNotes
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const canGenerateImage = Boolean(
+    GEMINI_IMAGE_ENABLED && imageSrc && imagePrompt.trim()
+  );
+  const canvasCursor =
+    tool === "eyedropper" ? "copy" : tool === "eraser" ? "cell" : "crosshair";
+  const opacityPercent = Math.round(brushOpacity * 100);
 
   return (
     <div className="p-4 grid gap-6 max-w-4xl mx-auto">
@@ -549,18 +767,129 @@ export default function PlayfulEnvironmentDesigner() {
 
       {imageSrc && (
         <div className="grid gap-4">
-          <div className="relative border rounded overflow-hidden">
-            <img
-              ref={imageRef}
-              src={imageSrc}
-              alt="Uploaded"
-              className="block w-full"
-            />
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 cursor-crosshair"
-              onClick={handleDraw}
-            />
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="relative border rounded overflow-hidden">
+              <img
+                ref={imageRef}
+                src={imageSrc}
+                alt="Uploaded"
+                className="block w-full"
+              />
+              <canvas
+                ref={canvasRef}
+                className="absolute inset-0"
+                style={{ touchAction: "none", cursor: canvasCursor }}
+                onPointerDown={handlePointerDown}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
+                onPointerLeave={handlePointerLeave}
+                onPointerCancel={handlePointerCancel}
+              />
+            </div>
+
+            <div className="rounded border bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-gray-800 mb-3">Sketch controls</p>
+              <div className="flex gap-2 mb-3">
+                {TOOL_OPTIONS.map(({ id, label, icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`flex-1 rounded border px-2 py-1 text-sm transition ${
+                      tool === id
+                        ? "bg-teal-600 text-white border-teal-600"
+                        : "bg-white border-gray-300 text-gray-700 hover:border-gray-400"
+                    }`}
+                    onClick={() => setTool(id)}
+                  >
+                    <span className="mr-1" aria-hidden="true">
+                      {icon}
+                    </span>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mb-3">
+                <label className="block text-xs font-semibold uppercase text-gray-500 mb-1">
+                  Brush color
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={brushColor}
+                    onChange={(e) => setBrushColor(e.target.value)}
+                    className="h-10 w-16 bg-transparent border border-gray-300 rounded cursor-pointer"
+                    aria-label="Pick brush color"
+                  />
+                  <div className="flex-1">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Opacity</span>
+                      <span>{opacityPercent}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.1"
+                      max="1"
+                      step="0.05"
+                      value={brushOpacity}
+                      onChange={(e) => setBrushOpacity(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-3">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span className="font-semibold uppercase">Brush size</span>
+                  <span>{brushSize}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="4"
+                  max="80"
+                  value={brushSize}
+                  onChange={(e) => setBrushSize(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  className="flex-1 rounded border px-3 py-1 text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+                  onClick={handleUndoSketch}
+                  disabled={!canUndo}
+                >
+                  Undo stroke
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 rounded border px-3 py-1 text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+                  onClick={handleClearSketch}
+                  disabled={!hasSketch}
+                >
+                  Clear sketch
+                </button>
+              </div>
+
+              <div className="border-t pt-3">
+                <p className="text-xs font-semibold uppercase text-gray-500 mb-1">
+                  Sketch legend
+                </p>
+                {sketchLegend.length ? (
+                  <ul className="text-sm text-gray-700 list-disc list-inside space-y-1 max-h-32 overflow-auto">
+                    {sketchLegend.map((item, index) => (
+                      <li key={`${item}-${index}`}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    Add legend notes in Step 4 to remind Gemini what each color or shape represents.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div>
@@ -743,11 +1072,24 @@ export default function PlayfulEnvironmentDesigner() {
               )}
 
               <button
-                className="mt-3 rounded bg-purple-600 text-white px-4 py-2"
+                type="button"
+                className={`mt-3 rounded px-4 py-2 text-white ${
+                  canGenerateImage
+                    ? "bg-purple-600 hover:bg-purple-500"
+                    : "bg-purple-300 cursor-not-allowed"
+                }`}
                 onClick={handleGenerateImage}
+                disabled={!canGenerateImage}
               >
                 Generate AI Image Concept
               </button>
+              <p className="text-xs text-gray-500 mt-2">
+                {canGenerateImage
+                  ? hasSketch
+                    ? "Sketch detected. Gemini will follow both the prompt and your highlights."
+                    : "No sketch yet—Gemini will rely on the photo and prompt. Add notes if you want to highlight areas."
+                  : "Upload a photo and generate the prompt to enable this button."}
+              </p>
               {imageGenerationStatus && (
                 <p className="text-sm text-gray-600 mt-2">{imageGenerationStatus}</p>
               )}
