@@ -14,16 +14,25 @@ const parseDataUrl = (dataUrl = "") => {
   };
 };
 
+const getInlineData = (part) => {
+  if (!part) return null;
+  const inlineData = part.inline_data || part.inlineData;
+  if (!inlineData || typeof inlineData !== "object") return null;
+  const mimeType = inlineData.mime_type || inlineData.mimeType || "";
+  const data = inlineData.data;
+  if (typeof data !== "string") return null;
+  return { data, mimeType };
+};
+
 const pickImagePart = (candidate) => {
   if (!candidate?.content?.parts) return null;
-  return (
-    candidate.content.parts.find(
-      (part) =>
-        part?.inline_data?.data &&
-        typeof part.inline_data.data === "string" &&
-        /^image\//.test(part.inline_data.mime_type || "")
-    ) || null
-  );
+  for (const part of candidate.content.parts) {
+    const inlineData = getInlineData(part);
+    if (inlineData && /^image\//.test(inlineData.mimeType)) {
+      return inlineData;
+    }
+  }
+  return null;
 };
 
 const conceptInstruction =
@@ -78,8 +87,8 @@ export default async function handler(req, res) {
 
   if (mode === "composite" && parsedImage) {
     parts.push({
-      inline_data: {
-        mime_type: parsedImage.mimeType,
+      inlineData: {
+        mimeType: parsedImage.mimeType,
         data: parsedImage.data,
       },
     });
@@ -90,14 +99,14 @@ export default async function handler(req, res) {
 
   if (mode === "inpainting" && parsedBase && parsedMask) {
     parts.push({
-      inline_data: {
-        mime_type: parsedBase.mimeType,
+      inlineData: {
+        mimeType: parsedBase.mimeType,
         data: parsedBase.data,
       },
     });
     parts.push({
-      inline_data: {
-        mime_type: parsedMask.mimeType,
+      inlineData: {
+        mimeType: parsedMask.mimeType,
         data: parsedMask.data,
       },
     });
@@ -147,6 +156,12 @@ export default async function handler(req, res) {
 
     const imagePart = pickImagePart(candidate);
     if (!imagePart) {
+      if (candidate) {
+        console.error(
+          "Gemini candidate content (no image):",
+          JSON.stringify(candidate, null, 2)
+        );
+      }
       console.error("Gemini returned no image:", data);
       return res
         .status(502)
@@ -154,8 +169,8 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      imageBase64: imagePart.inline_data.data,
-      mimeType: imagePart.inline_data.mime_type || "image/png",
+      imageBase64: imagePart.data,
+      mimeType: imagePart.mimeType || "image/png",
     });
   } catch (error) {
     console.error("Gemini image request failed:", error);

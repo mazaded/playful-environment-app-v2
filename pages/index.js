@@ -8,6 +8,8 @@ const GEMINI_IMAGE_ENABLED =
 const GEMINI_INPAINTING_ENABLED =
   (process.env.NEXT_PUBLIC_ENABLE_GEMINI_INPAINTING || "").toLowerCase() === "true";
 
+console.log("GEMINI flag", process.env.NEXT_PUBLIC_ENABLE_GEMINI_IMAGE);
+
 const MAX_PREVIEW_DIMENSION = 1024;
 const PREVIEW_QUALITY = 0.7;
 
@@ -106,6 +108,70 @@ export default function PlayfulEnvironmentDesigner() {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [conceptSourceImage, setConceptSourceImage] = useState(null);
   const [refinePrompt, setRefinePrompt] = useState("");
+
+  const condenseText = (text = "", wordLimit = 80) => {
+    const words = text.trim().split(/\s+/);
+    if (!text.trim() || words.length <= wordLimit) return text.trim();
+    return words.slice(0, wordLimit).join(" ");
+  };
+
+  const buildGeminiPrompt = () => {
+    const baseTag = scenarioType === "adaptation"
+      ? includePlay
+        ? "[Playful adaptation]"
+        : "[Non-play resilience]"
+      : "[Vulnerability assessment]";
+
+    const locationSnippet = location
+      ? `Context: ${location}.`
+      : detectedCoordinates
+        ? `Context: ${detectedCoordinates.latitude.toFixed(4)}, ${detectedCoordinates.longitude.toFixed(4)}.`
+        : "";
+
+    const hint = scenarioType === "adaptation"
+      ? findHint(location, detectedCoordinates)
+      : null;
+    const hintSnippet = hint
+      ? `Local cues: ${hint.hint}`
+      : "";
+    const speciesSnippet = hint?.species?.length
+      ? `Species: ${hint.species.slice(0, 2).join(", ")}.`
+      : "";
+
+    const sketchSnippet = drawingNotes.trim()
+      ? `Sketch notes: ${drawingNotes.trim()}.`
+      : "";
+
+    const userSnippet = imagePrompt.trim()
+      ? `User description: ${condenseText(imagePrompt, 80)}.`
+      : "";
+
+    const focusSnippet = scenarioType === "adaptation"
+      ? includePlay
+        ? "Instruction: show climate-smart play adaptations with natural materials."
+        : "Instruction: show low-impact climate adaptations; no play equipment."
+      : includePlay
+        ? "Instruction: describe vulnerability impacts on play only; no solutions."
+        : "Instruction: describe vulnerability impacts on daily use only; no solutions.";
+
+    const languageRule = detectLanguage(`${spaceDescription} ${transformation}`);
+    const languageSnippet = languageRule ? `Respond in ${languageRule.label}.` : "";
+
+    return [
+      baseTag,
+      locationSnippet,
+      userSnippet,
+      sketchSnippet,
+      hintSnippet,
+      speciesSnippet,
+      focusSnippet,
+      languageSnippet,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
 
   useEffect(() => {
     if (!imageSrc || !canvasRef.current || !imageRef.current) return;
@@ -269,7 +335,7 @@ export default function PlayfulEnvironmentDesigner() {
         ? `Coordinates: ${detectedCoordinates.latitude.toFixed(4)}, ${detectedCoordinates.longitude.toFixed(4)}. `
         : "";
 
-    const hint = scenarioType === "adaptation" && includePlay
+    const hint = scenarioType === "adaptation"
       ? findHint(location, detectedCoordinates)
       : null;
     const hintContext = hint?.hint ? ` Climate adaptation hint: ${hint.hint}` : "";
@@ -377,6 +443,12 @@ export default function PlayfulEnvironmentDesigner() {
       return;
     }
 
+    const geminiPrompt = buildGeminiPrompt();
+    if (!geminiPrompt) {
+      setImageGenerationStatus("Prompt is empty. Please describe the scene first.");
+      return;
+    }
+
     try {
       if (GEMINI_INPAINTING_ENABLED) {
         const baseCanvas = document.createElement("canvas");
@@ -414,7 +486,7 @@ export default function PlayfulEnvironmentDesigner() {
         const maskData = maskCanvas.toDataURL("image/png");
 
         await requestConceptImage({
-          promptText: imagePrompt,
+          promptText: geminiPrompt,
           baseDataUrl: baseData,
           maskData,
           useInpainting: true,
@@ -431,7 +503,7 @@ export default function PlayfulEnvironmentDesigner() {
 
         setConceptSourceImage(compositeData);
         await requestConceptImage({
-          promptText: imagePrompt,
+          promptText: geminiPrompt,
           compositeDataUrl: compositeData,
           useInpainting: false,
         });
