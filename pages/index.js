@@ -854,22 +854,24 @@ export default function PlayfulEnvironmentDesigner() {
                 />
               </div>
 
-              <div className="flex gap-2 mb-2">
+              <div className="flex gap-2 mb-2 bg-gray-100 rounded p-2">
                 <button
                   type="button"
-                  className="flex-1 rounded border px-3 py-1 text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+                  className="flex-1 rounded border px-3 py-1 text-sm bg-white hover:bg-gray-50 flex items-center justify-center gap-2 transition disabled:text-gray-500 disabled:border-gray-400 disabled:bg-white disabled:shadow-none disabled:cursor-not-allowed shadow-sm"
                   onClick={handleUndoSketch}
                   disabled={!canUndo}
                 >
-                  Undo stroke
+                  <span aria-hidden="true">↺</span>
+                  <span>Undo stroke</span>
                 </button>
                 <button
                   type="button"
-                  className="flex-1 rounded border px-3 py-1 text-sm bg-white hover:bg-gray-50 disabled:opacity-50"
+                  className="flex-1 rounded border px-3 py-1 text-sm bg-white hover:bg-gray-50 flex items-center justify-center gap-2 transition disabled:text-gray-500 disabled:border-gray-400 disabled:bg-white disabled:shadow-none disabled:cursor-not-allowed shadow-sm"
                   onClick={handleClearSketch}
                   disabled={!hasSketch}
                 >
-                  Clear sketch
+                  <span aria-hidden="true">🧹</span>
+                  <span>Clear sketch</span>
                 </button>
               </div>
 
@@ -1042,8 +1044,8 @@ export default function PlayfulEnvironmentDesigner() {
               Generate AI Prompt
             </button>
             {response && (
-              <div className="mt-3 border rounded p-3 bg-gray-50">
-                <strong>Suggested Prompt</strong>
+              <div className="mt-3 border rounded p-3 bg-gray-50 text-gray-900">
+                <strong className="text-gray-900">Suggested Prompt</strong>
                 <textarea
                   className="border p-2 w-full mt-2 text-sm text-black bg-white"
                   rows={3}
@@ -1107,9 +1109,11 @@ export default function PlayfulEnvironmentDesigner() {
 
                   {!GEMINI_INPAINTING_ENABLED && (
                     <div className="mt-4">
-                      <label className="block mb-2 text-sm font-medium">Refine the AI image (describe the tweak)</label>
+                      <label className="block mb-2 text-sm font-medium text-gray-800">
+                        Refine the AI image (describe the tweak)
+                      </label>
                       <textarea
-                        className="border p-2 w-full text-sm"
+                        className="border p-2 w-full text-sm text-gray-900"
                         rows={2}
                         value={refinePrompt}
                         onChange={(e) => setRefinePrompt(e.target.value)}
