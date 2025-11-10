@@ -157,7 +157,7 @@ export default function PlayfulEnvironmentDesigner() {
   const [hasSketch, setHasSketch] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
 
-  const condenseText = (text = "", wordLimit = 80) => {
+  const condenseText = (text = "", wordLimit = 110) => {
     const words = text.trim().split(/\s+/);
     if (!text.trim() || words.length <= wordLimit) return text.trim();
     return words.slice(0, wordLimit).join(" ");
