@@ -20,6 +20,24 @@ const TOOL_OPTIONS = [
   { id: "eyedropper", label: "Eyedropper", icon: "🎯" },
 ];
 
+const pickRandom = (items = []) => {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  const index = Math.floor(Math.random() * items.length);
+  return items[index];
+};
+
+const sampleItems = (items = [], count = 1) => {
+  if (!Array.isArray(items) || items.length === 0 || count <= 0) return [];
+  const pool = [...items];
+  const result = [];
+  const take = Math.min(count, pool.length);
+  for (let i = 0; i < take; i += 1) {
+    const index = Math.floor(Math.random() * pool.length);
+    result.push(pool.splice(index, 1)[0]);
+  }
+  return result;
+};
+
 const hexToRgb = (hex = "") => {
   const sanitized = hex.replace("#", "");
   if (![3, 6].includes(sanitized.length)) {
@@ -72,8 +90,13 @@ const LOCATION_HINTS = [
       const { latitude, longitude } = coords;
       return latitude <= -17 && latitude >= -20.5 && longitude >= 46 && longitude <= 49.5;
     },
-    hint: "Consider papyrus reedbeds, traveller's palms, screw pines, and raised bamboo play decks to slow floods around Antananarivo's wetlands.",
-    species: ["papyrus reedbeds", "traveller's palm", "screw pine", "bamboo decking"],
+    hints: [
+      "Use stepped papyrus reedbeds and bamboo play decks to slow runoff along wetland edges.",
+      "Float play pods over seasonal pools, linking them with woven palm bridges for refuge play.",
+      "Carve rain-garden amphitheaters with shade sails so families can gather above stormwater.",
+      "Mix terraced food gardens with kid-friendly water channels to drain courtyards after storms.",
+    ],
+    species: ["papyrus", "traveller's palm", "screw pine", "bamboo", "baobab saplings", "lemongrass", "water hyacinth mats"],
   },
   {
     name: "kisumu_kenya",
@@ -84,8 +107,13 @@ const LOCATION_HINTS = [
       const { latitude, longitude } = coords;
       return latitude <= 0 && latitude >= -1.2 && longitude >= 34 && longitude <= 35.8;
     },
-    hint: "Consider papyrus wetlands, raffia palms, African fan palms, and elevated boardwalk play routes to handle Lake Victoria flood pulses.",
-    species: ["papyrus", "raffia palm", "African fan palm"],
+    hints: [
+      "Lay floating play rafts tied to papyrus islands so kids can explore safer wetland zones.",
+      "Build permeable play plazas that drain into rain gardens before water reaches Lake Victoria.",
+      "Create raised mangrove boardwalk loops with shade hammocks for caregivers.",
+      "Add colorful rainwater slides that channel overflow into reed-filtered splash basins.",
+    ],
+    species: ["papyrus", "raffia palm", "African fan palm", "mangrove seedlings", "water lettuce", "sisal ropes", "native reeds"],
   },
 ];
 
@@ -335,11 +363,15 @@ export default function PlayfulEnvironmentDesigner() {
     const hint = scenarioType === "adaptation"
       ? findHint(location, detectedCoordinates)
       : null;
-    const hintSnippet = hint
-      ? `Local cues: ${hint.hint}`
-      : "";
-    const speciesSnippet = hint?.species?.length
-      ? `Species: ${hint.species.slice(0, 2).join(", ")}.`
+    const hintSentence = hint?.hints?.length
+      ? pickRandom(hint.hints)
+      : hint?.hint || "";
+    const hintSnippet = hintSentence ? `Local cues: ${hintSentence}` : "";
+    const speciesList = hint?.species?.length
+      ? sampleItems(hint.species, 2)
+      : [];
+    const speciesSnippet = speciesList.length
+      ? `Species: ${speciesList.join(", ")}.`
       : "";
 
     const sketchSnippet = drawingNotes.trim()
