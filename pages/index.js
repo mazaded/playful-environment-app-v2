@@ -178,6 +178,7 @@ export default function PlayfulEnvironmentDesigner() {
   const [generatedImage, setGeneratedImage] = useState(null);
   const [conceptSourceImage, setConceptSourceImage] = useState(null);
   const [refinePrompt, setRefinePrompt] = useState("");
+  const [refinementLog, setRefinementLog] = useState([]);
   const [tool, setTool] = useState("brush");
   const [brushColor, setBrushColor] = useState(DEFAULT_BRUSH_COLOR);
   const [brushOpacity, setBrushOpacity] = useState(0.6);
@@ -476,6 +477,7 @@ export default function PlayfulEnvironmentDesigner() {
     setDetectedCoordinates(null);
     setAutoDescription("");
     setAutoDescriptionStatus("");
+    setRefinementLog([]);
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -683,6 +685,7 @@ export default function PlayfulEnvironmentDesigner() {
       setImageGenerationStatus("Prompt is empty. Please describe the scene first.");
       return;
     }
+    setRefinementLog([]);
 
     try {
       const canUseInpainting = GEMINI_INPAINTING_ENABLED && hasSketch;
@@ -754,13 +757,116 @@ export default function PlayfulEnvironmentDesigner() {
 
   const handleRefinement = async () => {
     if (!conceptSourceImage || !refinePrompt.trim()) return;
+    const promptText = refinePrompt.trim();
     await requestConceptImage({
-      promptText: refinePrompt.trim(),
+      promptText,
       compositeDataUrl: conceptSourceImage,
       useInpainting: false,
       sketchProvided: true,
     });
+    setRefinementLog((prev) => [
+      ...prev,
+      {
+        prompt: promptText,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
     setRefinePrompt("");
+  };
+
+  const handleDownloadSession = () => {
+    if (!generatedImage) {
+      setImageGenerationStatus("Generate an image before downloading the session.");
+      return;
+    }
+
+    try {
+      const exportedAt = new Date();
+      const dateLabel = exportedAt.toLocaleDateString();
+      const timeLabel = exportedAt.toLocaleTimeString();
+      const timestampLabel = exportedAt.toISOString();
+      const locationLabel = location
+        ? location
+        : detectedCoordinates
+          ? `${detectedCoordinates.latitude.toFixed(4)}, ${detectedCoordinates.longitude.toFixed(4)}`
+          : "Not provided";
+      const refinementSummary = refinementLog.length
+        ? refinementLog
+            .map(
+              ({ prompt, timestamp }, index) =>
+                `${index + 1}. ${new Date(timestamp).toLocaleString()} — ${prompt}`
+            )
+            .join(" | ")
+        : "None";
+      const scoreText =
+        scoreSummary && scoreSummary.averages
+          ? `Matches: ${scoreSummary.matches}; Cost ${scoreSummary.averages.cost.toFixed(
+            1
+          )}/5; Ease ${scoreSummary.averages.ease.toFixed(1)}/5; Effectiveness ${scoreSummary.averages.effectiveness.toFixed(
+            1
+          )}/5`
+          : "Not available";
+
+      const dataFields = [
+        { field: "Space description", value: spaceDescription || "Not provided" },
+        { field: "Transformation", value: transformation || "Not provided" },
+        { field: "Sketch notes", value: drawingNotes || "Not provided" },
+        { field: "Scenario type", value: scenarioType },
+        { field: "Include play", value: includePlay ? "Yes" : "No" },
+        { field: "Generated prompt", value: imagePrompt || "Not generated" },
+        { field: "Auto description", value: autoDescription || "Not requested" },
+        { field: "Score summary", value: scoreText },
+        { field: "Image status", value: imageGenerationStatus || "Not started" },
+        { field: "Generated image (data URL)", value: generatedImage?.src || "Not available" },
+      ];
+
+      const headers = [
+        "Field",
+        "Value",
+        "Location",
+        "Date",
+        "Timestamp",
+        "Local Time",
+        "Refinement log",
+      ];
+      const csvRows = [headers];
+      dataFields.forEach(({ field, value }) => {
+        csvRows.push([
+          field,
+          value,
+          locationLabel,
+          dateLabel,
+          timestampLabel,
+          timeLabel,
+          refinementSummary,
+        ]);
+      });
+      const csvContent = csvRows
+        .map((row) =>
+          row
+            .map((cell) => {
+              const str = String(cell ?? "");
+              if (/[,"\n]/.test(str)) {
+                return `"${str.replace(/"/g, '""')}"`;
+              }
+              return str;
+            })
+            .join(",")
+        )
+        .join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `playful-session-${exportedAt.getTime()}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Excel export failed:", error);
+      setImageGenerationStatus("Could not download the session file.");
+    }
   };
 
   const sketchLegend = drawingNotes
@@ -1138,6 +1244,13 @@ export default function PlayfulEnvironmentDesigner() {
                   >
                     Download image
                   </a>
+                  <button
+                    type="button"
+                    className="inline-block mt-2 ml-2 px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600"
+                    onClick={handleDownloadSession}
+                  >
+                    Download session (.csv)
+                  </button>
 
                   {!GEMINI_INPAINTING_ENABLED && (
                     <div className="mt-4">
