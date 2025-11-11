@@ -191,6 +191,7 @@ export default function PlayfulEnvironmentDesigner() {
   const [imageGenerationStatus, setImageGenerationStatus] = useState("");
   const [generatedImage, setGeneratedImage] = useState(null);
   const [conceptSourceImage, setConceptSourceImage] = useState(null);
+  const [sketchComposite, setSketchComposite] = useState(null);
   const [refinePrompt, setRefinePrompt] = useState("");
   const [refinementLog, setRefinementLog] = useState([]);
   const [tool, setTool] = useState("brush");
@@ -498,6 +499,7 @@ export default function PlayfulEnvironmentDesigner() {
     setAutoDescription("");
     setAutoDescriptionStatus("");
     setRefinementLog([]);
+    setSketchComposite(null);
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -762,6 +764,7 @@ export default function PlayfulEnvironmentDesigner() {
         const compositeData = compositeCanvas.toDataURL("image/png");
 
         setConceptSourceImage(compositeData);
+        setSketchComposite(compositeData);
         await requestConceptImage({
           promptText: geminiPrompt,
           compositeDataUrl: compositeData,
@@ -784,6 +787,7 @@ export default function PlayfulEnvironmentDesigner() {
       useInpainting: false,
       sketchProvided: true,
     });
+    setSketchComposite(conceptSourceImage);
     setRefinementLog((prev) => [
       ...prev,
       {
@@ -1266,6 +1270,15 @@ export default function PlayfulEnvironmentDesigner() {
                   >
                     Download image
                   </a>
+                  {sketchComposite && (
+                    <a
+                      href={sketchComposite}
+                      download="sketch-overlay.png"
+                      className="inline-block mt-2 ml-2 px-3 py-1 bg-amber-600 text-white rounded"
+                    >
+                      Download sketch overlay
+                    </a>
+                  )}
                   <button
                     type="button"
                     className="inline-block mt-2 ml-2 px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600"
