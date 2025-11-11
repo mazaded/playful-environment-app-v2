@@ -90,13 +90,20 @@ const LOCATION_HINTS = [
       const { latitude, longitude } = coords;
       return latitude <= -17 && latitude >= -20.5 && longitude >= 46 && longitude <= 49.5;
     },
-    hints: [
+    playHints: [
       "Use stepped papyrus reedbeds and bamboo play decks to slow runoff along wetland edges.",
       "Float play pods over seasonal pools, linking them with woven palm bridges for refuge play.",
       "Carve rain-garden amphitheaters with shade sails so families can gather above stormwater.",
       "Mix terraced food gardens with kid-friendly water channels to drain courtyards after storms.",
     ],
-    species: ["papyrus", "traveller's palm", "screw pine", "bamboo", "baobab saplings", "lemongrass", "water hyacinth mats"],
+    resilienceHints: [
+      "Install stepped bioswales and reed terraces to slow runoff entering the wetlands.",
+      "Raise footpaths on porous laterite blocks so residents can cross flooded courtyards.",
+      "Use bamboo pergolas with rain chains to direct water into cisterns.",
+      "Plant deep-rooted vetiver belts to stabilize slopes and reduce erosion.",
+    ],
+    playSpecies: ["papyrus", "traveller's palm", "screw pine", "bamboo", "baobab saplings", "lemongrass", "water hyacinth mats"],
+    resilienceSpecies: ["papyrus", "vetiver grass", "ravinala", "baobab saplings", "lemongrass", "native shrubs"],
   },
   {
     name: "kisumu_kenya",
@@ -107,13 +114,20 @@ const LOCATION_HINTS = [
       const { latitude, longitude } = coords;
       return latitude <= 0 && latitude >= -1.2 && longitude >= 34 && longitude <= 35.8;
     },
-    hints: [
+    playHints: [
       "Lay floating play rafts tied to papyrus islands so kids can explore safer wetland zones.",
       "Build permeable play plazas that drain into rain gardens before water reaches Lake Victoria.",
       "Create raised mangrove boardwalk loops with shade hammocks for caregivers.",
       "Add colorful rainwater slides that channel overflow into reed-filtered splash basins.",
     ],
-    species: ["papyrus", "raffia palm", "African fan palm", "mangrove seedlings", "water lettuce", "sisal ropes", "native reeds"],
+    resilienceHints: [
+      "Build permeable stone check dams that bleed flood pulses back into reedbeds.",
+      "Restore papyrus berms with mangrove seedlings to buffer waves.",
+      "Channel runoff into terraced rain gardens with overflow basins before it reaches Lake Victoria.",
+      "Suspend footbridges on sisal ropes to keep market routes above seasonal water.",
+    ],
+    playSpecies: ["papyrus", "raffia palm", "African fan palm", "mangrove seedlings", "water lettuce", "sisal ropes", "native reeds"],
+    resilienceSpecies: ["papyrus", "mangrove seedlings", "raffia palm", "sisal", "native reeds", "water hyacinth control mats"],
   },
 ];
 
@@ -364,13 +378,19 @@ export default function PlayfulEnvironmentDesigner() {
     const hint = scenarioType === "adaptation"
       ? findHint(location, detectedCoordinates)
       : null;
-    const hintSentence = hint?.hints?.length
-      ? pickRandom(hint.hints)
-      : hint?.hint || "";
+    const hintPool = hint
+      ? includePlay
+        ? hint.playHints
+        : hint.resilienceHints
+      : null;
+    const speciesPool = hint
+      ? includePlay
+        ? hint.playSpecies
+        : hint.resilienceSpecies || hint.playSpecies
+      : null;
+    const hintSentence = hintPool?.length ? pickRandom(hintPool) : "";
     const hintSnippet = hintSentence ? `Local cues: ${hintSentence}` : "";
-    const speciesList = hint?.species?.length
-      ? sampleItems(hint.species, 2)
-      : [];
+    const speciesList = speciesPool?.length ? sampleItems(speciesPool, 2) : [];
     const speciesSnippet = speciesList.length
       ? `Species: ${speciesList.join(", ")}.`
       : "";
