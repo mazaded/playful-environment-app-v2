@@ -785,11 +785,9 @@ export default function PlayfulEnvironmentDesigner() {
       const dateLabel = exportedAt.toLocaleDateString();
       const timeLabel = exportedAt.toLocaleTimeString();
       const timestampLabel = exportedAt.toISOString();
-      const locationLabel = location
-        ? location
-        : detectedCoordinates
-          ? `${detectedCoordinates.latitude.toFixed(4)}, ${detectedCoordinates.longitude.toFixed(4)}`
-          : "Not provided";
+      const locationLabel = location || (detectedCoordinates ? "Detected via GPS" : "Not provided");
+      const latitudeLabel = detectedCoordinates ? detectedCoordinates.latitude.toFixed(4) : "";
+      const longitudeLabel = detectedCoordinates ? detectedCoordinates.longitude.toFixed(4) : "";
       const refinementSummary = refinementLog.length
         ? refinementLog
             .map(
@@ -824,6 +822,8 @@ export default function PlayfulEnvironmentDesigner() {
         "Field",
         "Value",
         "Location",
+        "Latitude",
+        "Longitude",
         "Date",
         "Timestamp",
         "Local Time",
@@ -835,6 +835,8 @@ export default function PlayfulEnvironmentDesigner() {
           field,
           value,
           locationLabel,
+          latitudeLabel,
+          longitudeLabel,
           dateLabel,
           timestampLabel,
           timeLabel,
